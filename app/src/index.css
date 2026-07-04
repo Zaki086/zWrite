@@ -1,0 +1,500 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 222 47% 11%;
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
+    --primary: 239 84% 67%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 220 14% 96%;
+    --secondary-foreground: 222 47% 11%;
+    --muted: 220 14% 96%;
+    --muted-foreground: 215 16% 47%;
+    --accent: 220 14% 96%;
+    --accent-foreground: 222 47% 11%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 220 13% 91%;
+    --input: 220 13% 91%;
+    --ring: 239 84% 67%;
+    --radius: 0.5rem;
+    --sidebar-background: 0 0% 98%;
+    --sidebar-foreground: 222 47% 11%;
+    --sidebar-primary: 239 84% 67%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 220 14% 96%;
+    --sidebar-accent-foreground: 222 47% 11%;
+    --sidebar-border: 220 13% 91%;
+    --sidebar-ring: 239 84% 67%;
+  }
+
+  .dark {
+    --background: 222 47% 7%;
+    --foreground: 210 40% 98%;
+    --card: 222 47% 9%;
+    --card-foreground: 210 40% 98%;
+    --popover: 222 47% 9%;
+    --popover-foreground: 210 40% 98%;
+    --primary: 239 84% 67%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 217 33% 17%;
+    --secondary-foreground: 210 40% 98%;
+    --muted: 217 33% 17%;
+    --muted-foreground: 215 20% 65%;
+    --accent: 217 33% 17%;
+    --accent-foreground: 210 40% 98%;
+    --destructive: 0 63% 31%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 217 33% 17%;
+    --input: 217 33% 17%;
+    --ring: 239 84% 67%;
+    --sidebar-background: 222 47% 9%;
+    --sidebar-foreground: 210 40% 98%;
+    --sidebar-primary: 239 84% 67%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 217 33% 17%;
+    --sidebar-accent-foreground: 210 40% 98%;
+    --sidebar-border: 217 33% 17%;
+    --sidebar-ring: 239 84% 67%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  }
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Plus Jakarta Sans', 'Inter', system-ui, sans-serif;
+  }
+}
+
+@layer components {
+  .zw-scrollbar::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  .zw-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .zw-scrollbar::-webkit-scrollbar-thumb {
+    background: hsl(var(--muted-foreground) / 0.25);
+    border-radius: 3px;
+  }
+  .zw-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--muted-foreground) / 0.4);
+  }
+
+  /* ===== REAL MULTI-PAGE RENDERING (decoration-based) ===== */
+  /* The wrapper that contains both background sheets and editor */
+  .paged-editor-wrapper {
+    position: relative;
+    margin: 0 auto;
+  }
+
+  /* The real editor content sits on top of the background sheets */
+  .paged-editor-content {
+    position: relative;
+    z-index: 1;
+  }
+
+  /* Page break spacer widgets injected by ProseMirror decorations */
+  .page-break-spacer {
+    display: block;
+    width: 100%;
+    pointer-events: none;
+    user-select: none;
+    background: transparent;
+    position: relative;
+    flex-shrink: 0;
+  }
+  /* Visual indicator line within the spacer */
+  .page-break-spacer::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 12px; /* line near the top of the gap, not middle */
+    height: 1px;
+    background: linear-gradient(
+      to right,
+      transparent 0%,
+      hsl(var(--muted-foreground) / 0.15) 20%,
+      hsl(var(--muted-foreground) / 0.15) 80%,
+      transparent 100%
+    );
+  }
+
+  /* The background layer with white page sheets */
+  .page-background-layer {
+    pointer-events: none;
+  }
+  .page-bg-sheet {
+    background: #ffffff;
+    box-shadow: 0 2px 12px rgb(0 0 0 / 0.10), 0 0 1px rgb(0 0 0 / 0.15);
+    border-radius: 2px;
+  }
+
+  /* ===== PROSEMIRROR / EDITOR STYLES ===== */
+  .prose-editor {
+    outline: none;
+    min-height: 100px;
+    cursor: text;
+    caret-color: #4F46E5;
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    font-size: 11pt;
+    line-height: 1.6;
+    color: #000000; /* default body text always black, not theme-dependent */
+  }
+
+  /* Placeholder text — must NOT create a visible box */
+  .prose-editor p.is-editor-empty:first-child::before {
+    content: attr(data-placeholder);
+    color: #9ca3af;
+    pointer-events: none;
+    float: left;
+    height: 0;
+  }
+
+  /* Gapcursor — the cursor between blocks */
+  .prose-editor .ProseMirror-gapcursor {
+    display: none;
+    pointer-events: none;
+    position: absolute;
+  }
+  .prose-editor .ProseMirror-gapcursor:after {
+    content: "";
+    display: block;
+    position: absolute;
+    top: -2px;
+    width: 20px;
+    border-top: 2px solid #4F46E5;
+    animation: ProseMirror-cursor-blink 1.1s steps(2, start) infinite;
+  }
+
+  /* Selected node highlight */
+  .prose-editor .ProseMirror-selectednode {
+    outline: 2px solid #4F46E5;
+    outline-offset: 2px;
+  }
+
+  /* Ensure dropcursor is subtle */
+  .prose-editor .ProseMirror-dropcursor {
+    background: #4F46E5;
+    width: 2px;
+  }
+
+  /* ===== TYPOGRAPHY ===== */
+  .prose-editor h1 { font-size: 2em; font-weight: 700; margin: 0.67em 0; line-height: 1.2; }
+  .prose-editor h2 { font-size: 1.5em; font-weight: 700; margin: 0.83em 0; line-height: 1.3; }
+  .prose-editor h3 { font-size: 1.25em; font-weight: 600; margin: 1em 0; line-height: 1.4; }
+  .prose-editor h4 { font-size: 1.1em; font-weight: 600; margin: 1.33em 0; }
+  .prose-editor h5 { font-size: 1em; font-weight: 600; margin: 1.5em 0; }
+  .prose-editor h6 { font-size: 0.875em; font-weight: 600; margin: 1.67em 0; text-transform: uppercase; letter-spacing: 0.05em; }
+
+  .prose-editor p { margin: 0.5em 0; line-height: 1.6; }
+  .prose-editor > *:first-child { margin-top: 0; }
+  .prose-editor > *:last-child { margin-bottom: 0; }
+
+  .prose-editor ul, .prose-editor ol {
+    padding-left: 1.5em;
+    margin: 0.5em 0;
+  }
+  .prose-editor ul { list-style-type: disc; }
+  .prose-editor ol { list-style-type: decimal; }
+  .prose-editor ul ul, .prose-editor ol ol, .prose-editor ul ol, .prose-editor ol ul { margin: 0.25em 0; }
+  .prose-editor ul ul { list-style-type: circle; }
+  .prose-editor ul ul ul { list-style-type: square; }
+
+  .prose-editor blockquote {
+    border-left: 3px solid #d1d5db;
+    padding-left: 1em;
+    margin: 1em 0;
+    color: #6b7280;
+  }
+
+  .prose-editor pre {
+    background: #f3f4f6;
+    padding: 0.75em 1em;
+    border-radius: 6px;
+    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+    font-size: 0.875em;
+    overflow-x: auto;
+  }
+
+  .prose-editor code {
+    background: #f3f4f6;
+    padding: 0.125em 0.375em;
+    border-radius: 4px;
+    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+    font-size: 0.875em;
+  }
+
+  .prose-editor pre code { background: none; padding: 0; }
+
+  .prose-editor hr {
+    border: none;
+    border-top: 1px solid #e5e7eb;
+    margin: 1.5em 0;
+  }
+
+  .prose-editor a {
+    color: #4F46E5;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+
+  /* ===== TABLES ===== */
+  .prose-editor table {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 1em 0;
+    table-layout: fixed;
+  }
+
+  .prose-editor table td,
+  .prose-editor table th {
+    border: 1px solid #d1d5db;
+    padding: 8px 12px;
+    vertical-align: top;
+    min-width: 48px;
+    position: relative;
+  }
+
+  .prose-editor table th {
+    background: #f9fafb;
+    font-weight: 600;
+  }
+
+  .prose-editor table .selectedCell {
+    background: rgba(79, 70, 229, 0.08);
+  }
+
+  /* ===== IMAGES ===== */
+  .prose-editor img {
+    max-width: 100%;
+    height: auto;
+    display: inline-block;
+  }
+
+  /* ===== RESIZABLE IMAGE NODEVIEW ===== */
+  .image-node-view {
+    position: relative;
+    transition: box-shadow 0.15s ease;
+  }
+  .image-node-view.is-selected {
+    outline: 2px solid #4F46E5;
+    outline-offset: 4px;
+    border-radius: 2px;
+  }
+
+  .image-toolbar {
+    position: absolute;
+    top: -36px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    padding: 4px 6px;
+    background: #1f2937;
+    border-radius: 6px;
+    z-index: 50;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+    white-space: nowrap;
+  }
+  .image-toolbar .toolbar-sep {
+    width: 1px;
+    height: 16px;
+    background: rgba(255, 255, 255, 0.2);
+    margin: 0 2px;
+  }
+  .image-toolbar button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    border: none;
+    border-radius: 4px;
+    background: transparent;
+    color: #d1d5db;
+    cursor: pointer;
+    transition: all 0.12s;
+  }
+  .image-toolbar button:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: #fff;
+  }
+  .image-toolbar button.active {
+    background: #4F46E5;
+    color: #fff;
+  }
+
+  /* Resize handles */
+  .image-wrapper {
+    position: relative;
+  }
+  .resize-handle {
+    position: absolute;
+    width: 8px;
+    height: 8px;
+    background: #4F46E5;
+    border: 1.5px solid #ffffff;
+    border-radius: 50%;
+    z-index: 10;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  }
+  .resize-handle:hover {
+    background: #6366f1;
+    transform: scale(1.2);
+  }
+  /* Corner handles */
+  .resize-handle.nw { top: -4px; left: -4px; cursor: nw-resize; }
+  .resize-handle.ne { top: -4px; right: -4px; cursor: ne-resize; }
+  .resize-handle.sw { bottom: -4px; left: -4px; cursor: sw-resize; }
+  .resize-handle.se { bottom: -4px; right: -4px; cursor: se-resize; }
+  /* Edge handles */
+  .resize-handle.n { top: -4px; left: 50%; transform: translateX(-50%); cursor: n-resize; }
+  .resize-handle.s { bottom: -4px; left: 50%; transform: translateX(-50%); cursor: s-resize; }
+  .resize-handle.e { top: 50%; right: -4px; transform: translateY(-50%); cursor: e-resize; }
+  .resize-handle.w { top: 50%; left: -4px; transform: translateY(-50%); cursor: w-resize; }
+
+  /* ===== IMAGE LAYOUT MODES (Fix 3) ===== */
+  /* Block centered (default) */
+  .prose-editor .img-layout-block-center {
+    display: block !important;
+    margin: 0.5em auto;
+    text-align: center;
+  }
+  /* Float left - image on left, text wraps on right */
+  .prose-editor .img-layout-float-left {
+    float: left !important;
+    margin: 0.25em 1em 0.5em 0 !important;
+    clear: left;
+  }
+  /* Float right - image on right, text wraps on left */
+  .prose-editor .img-layout-float-right {
+    float: right !important;
+    margin: 0.25em 0 0.5em 1em !important;
+    clear: right;
+  }
+  /* Ensure prose-editor clears floats properly */
+  .prose-editor::after {
+    content: '';
+    display: table;
+    clear: both;
+  }
+
+  /* ===== PAGE BREAK ===== */
+  .prose-editor .page-break {
+    page-break-after: always;
+    border-bottom: 2px dashed #d1d5db;
+    margin: 24px 0;
+    padding: 12px 0;
+    text-align: center;
+    color: #9ca3af;
+    font-size: 12px;
+    user-select: none;
+  }
+}
+
+/* ===== PRINT STYLES ===== */
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 0; /* content padding serves as margins */
+  }
+
+  html, body {
+    background: white !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  /* Hide all UI chrome */
+  .no-print,
+  .image-toolbar,
+  .resize-handle,
+  .page-background-layer {
+    display: none !important;
+  }
+
+  /* Reset zoom */
+  .print-wrapper {
+    transform: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    width: 100% !important;
+  }
+
+  /* Page break spacers: 1px block forces a real page break */
+  .page-break-spacer {
+    display: block !important;
+    height: 1px !important;
+    break-after: page !important;
+    page-break-after: always !important;
+  }
+  .page-break-spacer::after {
+    display: none !important;
+  }
+
+  /* Remove mask/overflow for print — let content flow with breaks */
+  .paged-editor-content {
+    -webkit-mask-image: none !important;
+    mask-image: none !important;
+    overflow: visible !important;
+  }
+
+  /* Fixed A4 width, centered */
+  .paged-editor-wrapper {
+    width: 210mm !important;
+    margin: 0 auto !important;
+    min-height: auto !important;
+  }
+
+  /* Content flow */
+  main {
+    overflow: visible !important;
+    background: white !important;
+    height: auto !important;
+  }
+
+  /* Keep important elements together */
+  .prose-editor h1,
+  .prose-editor h2,
+  .prose-editor h3,
+  .prose-editor h4,
+  .prose-editor h5,
+  .prose-editor h6 {
+    page-break-after: avoid;
+  }
+  .prose-editor table,
+  .prose-editor img,
+  .prose-editor pre,
+  .prose-editor blockquote,
+  .prose-editor .image-node-view {
+    page-break-inside: avoid;
+  }
+  .prose-editor tr {
+    page-break-inside: avoid;
+  }
+
+  /* Hide scrollbars */
+  .zw-scrollbar::-webkit-scrollbar {
+    display: none !important;
+  }
+}
