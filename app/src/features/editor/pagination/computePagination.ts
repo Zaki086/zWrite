@@ -45,19 +45,41 @@ export function computePagination(
   let cumulative = 0;
   let blockIndex = 0;
 
-  function traverse(node: any, pos: number) {
+  function traverse(node: any, pos: number, depth: number = 0) {
+    const indent = '  '.repeat(depth);
+    console.log(`${indent}traverse: pos=${pos}, type=${node.type.name}`);
     if (
       node.type.name === 'bulletList' ||
       node.type.name === 'orderedList' ||
       node.type.name === 'table'
     ) {
+      console.log(`${indent}-> ENTERING CONTAINER: ${node.type.name}`);
       // Descend into container children (<li>, <tr>)
       node.forEach((child: any, offset: number) => {
-        traverse(child, pos + 1 + offset);
+        traverse(child, pos + 1 + offset, depth + 1);
       });
     } else {
       // Splittable unit or standard top-level block
-      const el = editor!.view.nodeDOM(pos) as HTMLElement;
+      let el = editor!.view.nodeDOM(pos) as HTMLElement;
+      
+      if (!el || el.nodeType !== 1) {
+        try {
+          const domPos = editor!.view.domAtPos(pos);
+          if (domPos && domPos.node && domPos.node.nodeType === 1) {
+            const child = domPos.node.childNodes[domPos.offset];
+            if (child && child.nodeType === 1) {
+              el = child as HTMLElement;
+            } else {
+              el = domPos.node as HTMLElement;
+            }
+          }
+        } catch (e) {
+          console.error('Error resolving DOM node at pos', pos, e);
+        }
+      }
+
+      console.log(`${indent}-> nodeDOM/domAtPos(${pos}) =`, el ? el.nodeName : 'NULL');
+      
       if (el && el.nodeType === 1) {
         // Strict Filtering: Ignore any injected widgets, spacers, or background elements
         if (
@@ -66,6 +88,7 @@ export function computePagination(
           el.classList.contains('page-background') ||
           el.hasAttribute('data-page-end')
         ) {
+          console.log(`${indent}-> IGNORED non-content block`);
           return;
         }
 
@@ -80,6 +103,8 @@ export function computePagination(
         });
         cumulative += rect.height;
         blockIndex++;
+      } else {
+        console.log(`${indent}-> SKIPPED block (no valid DOM element)`);
       }
     }
   }
@@ -117,6 +142,7 @@ export function computePagination(
   }
 
   const pageCount = blocks.length === 0 ? 1 : currentPage + 1;
+  console.log(`computePagination complete: generated ${blocks.length} blocks over ${pageCount} pages`);
 
   return { blocks, pageCount, pageContentHeight: pageContentH, pageHeight: pageH, pageGap: PAGE_GAP, pageWidth: pageW };
 }
