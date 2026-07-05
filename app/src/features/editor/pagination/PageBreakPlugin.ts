@@ -5,8 +5,26 @@
  * Places one spacer widget after flatUnits[pageBreaks[i]] for each page break.
  *
  * Critically: this plugin performs NO second traversal of the document.
- * All positions come directly from the flatUnits[] array built by
- * computePageLayout. There is no independent index mapping to maintain.
+ * All positions come directly from the flatUnits[] array built by computePageLayout.
+ *
+ * Spacer height formula — Option B (anchor-to-absolute):
+ * ──────────────────────────────────────────────────────
+ * Instead of accumulating relative heights (which omit CSS margins and
+ * can drift due to margin-collapse, rounding, etc.), each spacer is sized
+ * to snap the next page's first content unit to the EXACT Y coordinate that
+ * the fixed mask/background geometry expects:
+ *
+ *   targetY = (breakNumber + 1) × (pageHeight + pageGap) + topMarginPx
+ *             (relative to .paged-editor-content top)
+ *
+ *   currentY = spacer's DOM top (i.e. the bottom of the last unit on this page)
+ *              (relative to .paged-editor-content top)
+ *
+ *   spacerHeight = targetY − currentY
+ *
+ * This is self-correcting: even if some height measurement was slightly off,
+ * each spacer snaps the flow back to the exact fixed geometry line, preventing
+ * drift from compounding across multiple pages.
  */
 import { Plugin, PluginKey } from 'prosemirror-state';
 import { Decoration, DecorationSet } from 'prosemirror-view';
@@ -21,7 +39,6 @@ export function createPageBreakPlugin(): Plugin<DecorationSet> {
     state: {
       init() { return DecorationSet.empty; },
       apply(tr, value) {
-        // Always map existing decorations through any document changes first
         let mapped = value.map(tr.mapping, tr.doc);
         const meta = tr.getMeta(pageBreakPluginKey);
         if (meta?.pagination) {
@@ -40,33 +57,22 @@ export function createPageBreakPlugin(): Plugin<DecorationSet> {
 }
 
 function buildDecorations(doc: any, pagination: PageLayoutResult): DecorationSet {
-  const { flatUnits, pageBreaks, pageCount, pageContentHeight, pageGap } = pagination;
+  const {
+    flatUnits, pageBreaks, spacerHeights, pageCount,
+  } = pagination;
   const decorations: Decoration[] = [];
 
   if (pageCount <= 1 || pageBreaks.length === 0 || flatUnits.length === 0) {
     return DecorationSet.empty;
   }
 
-  // For each page break index, insert a spacer widget AFTER the unit at that index.
-  // The spacer height fills the remaining space on the current page plus the gap
-  // to the next page, so content below it visually starts at the top of the next page.
   for (let bi = 0; bi < pageBreaks.length; bi++) {
     const unitIndex = pageBreaks[bi];
     const unit = flatUnits[unitIndex];
     if (!unit) continue;
 
-    // Calculate how much vertical space is left on this page by summing heights
-    // of all units on the same page (units between the previous break and this one).
-    const prevBreakUnitIndex = bi === 0 ? -1 : pageBreaks[bi - 1];
-    let pageUsedHeight = 0;
-    for (let j = prevBreakUnitIndex + 1; j <= unitIndex; j++) {
-      if (flatUnits[j]) pageUsedHeight += flatUnits[j].height;
-    }
-
-    const remaining = Math.max(0, pageContentHeight - pageUsedHeight);
-    const spacerHeight = remaining + pageGap;
-
-    if (spacerHeight <= pageGap) continue; // Nothing meaningful to add
+    const spacerHeight = spacerHeights[bi];
+    if (spacerHeight === undefined || spacerHeight < 1) continue;
 
     const widget = document.createElement('div');
     widget.className = 'page-break-spacer ProseMirror-widget';
@@ -78,10 +84,9 @@ function buildDecorations(doc: any, pagination: PageLayoutResult): DecorationSet
     widget.setAttribute('data-page-end', String(bi + 1));
 
     // Place widget directly at unit.endPos — read straight from the flat array.
-    // No second traversal, no index lookup against an independently-built structure.
     decorations.push(
       Decoration.widget(unit.endPos, () => widget, {
-        side: 1,           // Place after the node at endPos
+        side: 1,
         key: `page-end-${bi}`,
       })
     );

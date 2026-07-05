@@ -24,6 +24,40 @@ const A4_W_MM = 210;
 const A4_H_MM = 297;
 const PAGE_GAP = 24;
 
+/**
+ * Calculates the effective bottom margin of an element, accounting for
+ * basic CSS margin collapse with its last block child.
+ */
+function getEffectiveMarginBottom(el: HTMLElement): number {
+  let margin = parseFloat(window.getComputedStyle(el).marginBottom) || 0;
+  let lastChild = el.lastElementChild as HTMLElement;
+  while (lastChild) {
+    const style = window.getComputedStyle(lastChild);
+    if (style.display !== 'block' && style.display !== 'list-item') break;
+    const childMargin = parseFloat(style.marginBottom) || 0;
+    margin = Math.max(margin, childMargin);
+    lastChild = lastChild.lastElementChild as HTMLElement;
+  }
+  return margin;
+}
+
+/**
+ * Calculates the effective top margin of an element, accounting for
+ * basic CSS margin collapse with its first block child.
+ */
+function getEffectiveMarginTop(el: HTMLElement): number {
+  let margin = parseFloat(window.getComputedStyle(el).marginTop) || 0;
+  let firstChild = el.firstElementChild as HTMLElement;
+  while (firstChild) {
+    const style = window.getComputedStyle(firstChild);
+    if (style.display !== 'block' && style.display !== 'list-item') break;
+    const childMargin = parseFloat(style.marginTop) || 0;
+    margin = Math.max(margin, childMargin);
+    firstChild = firstChild.firstElementChild as HTMLElement;
+  }
+  return margin;
+}
+
 /** One leaf-level breakable unit in document order */
 export interface FlatUnit {
   pos: number;           // ProseMirror position of node start
@@ -36,11 +70,17 @@ export interface FlatUnit {
 export interface PageLayoutResult {
   flatUnits: FlatUnit[];
   pageBreaks: number[];   // Indices into flatUnits: "spacer goes AFTER flatUnits[i]"
+  spacerHeights: number[]; // Pre-computed perfect spacer heights for each break
   pageCount: number;
   pageContentHeight: number;
   pageHeight: number;
   pageGap: number;
   pageWidth: number;
+  topMarginPx: number;    // Margin padding above content (used for spacer anchor calc)
+  bottomMarginPx: number; // Margin padding below content (used for spacer anchor calc)
+  /** Y-coordinate (relative to .paged-editor-content top) of the editor DOM element.
+   * Used as the origin for converting getBoundingClientRect values to content-relative coords. */
+  editorOriginY: number;
 }
 
 // ── Legacy type aliases so callers that import PaginationResult / PageBlock keep compiling ──
@@ -130,6 +170,7 @@ const IS_DEV = typeof import.meta !== 'undefined' && (import.meta as any).env?.D
  * one function, with one shared data structure, so the two halves can never
  * desync.
  */
+
 export function computePageLayout(
   editor: Editor | null,
   topMarginMm: number,
@@ -137,22 +178,38 @@ export function computePageLayout(
 ): PageLayoutResult {
   const pageH = A4_H_MM * MM_TO_PX;
   const pageW = A4_W_MM * MM_TO_PX;
-  const pageContentH = (A4_H_MM - topMarginMm - bottomMarginMm) * MM_TO_PX;
+  const topMarginPx = topMarginMm * MM_TO_PX;
+  const bottomMarginPx = bottomMarginMm * MM_TO_PX;
+  const pageContentH = pageH - topMarginPx - bottomMarginPx;
 
   const empty = (): PageLayoutResult => ({
     flatUnits: [],
     pageBreaks: [],
+    spacerHeights: [],
     pageCount: 1,
     pageContentHeight: pageContentH,
     pageHeight: pageH,
     pageGap: PAGE_GAP,
     pageWidth: pageW,
+    topMarginPx,
+    bottomMarginPx,
+    editorOriginY: 0,
   });
 
   if (!editor?.view || pageContentH <= 0) return empty();
 
   const view = editor.view;
   const doc = editor.state.doc;
+
+  // Measure editorOriginY: the Y-coordinate of the ProseMirror DOM element
+  // relative to the .paged-editor-content container. This is used in PageBreakPlugin
+  // to convert getBoundingClientRect values to content-div-relative coordinates.
+  // (It equals topMarginPx in practice, but we measure it to avoid floating-point drift.)
+  const editorDom = view.dom as HTMLElement;
+  const contentDiv = editorDom.closest('.paged-editor-content') as HTMLElement | null;
+  const editorOriginY = contentDiv
+    ? editorDom.getBoundingClientRect().top - contentDiv.getBoundingClientRect().top
+    : topMarginPx;
 
   // ── Step 1: Flatten doc into one ordered FlatUnit[] ──────────────────────
   const flatUnits: FlatUnit[] = [];
@@ -165,59 +222,99 @@ export function computePageLayout(
     return empty();
   }
 
-  // ── Step 2: Greedy height accumulation → pageBreaks[] ────────────────────
-  // Walk the SAME flatUnits array. When a unit would overflow, record a break
-  // at the previous unit index and start a fresh running total.
+  // ── Step 2: Un-spaced Ribbon Slicing → pageBreaks[] & spacerHeights[] ──
+  // Hide existing spacers to force a reflow. This allows us to measure the document
+  // as a perfect, continuous ribbon, completely sidestepping margin-collapse bugs.
+  const oldSpacers = editorDom.querySelectorAll('.page-break-spacer');
+  oldSpacers.forEach(s => (s as HTMLElement).style.display = 'none');
+
+  const contentDivTop = contentDiv ? contentDiv.getBoundingClientRect().top : 0;
+  
+  // Pre-measure all un-spaced tops and bottoms
+  const unSpacedTops: number[] = new Array(flatUnits.length);
+  const unSpacedBottoms: number[] = new Array(flatUnits.length);
+  for (let i = 0; i < flatUnits.length; i++) {
+    const rect = flatUnits[i].el.getBoundingClientRect();
+    unSpacedTops[i] = rect.top - contentDivTop;
+    unSpacedBottoms[i] = rect.bottom - contentDivTop;
+  }
+
   const pageBreaks: number[] = [];
-  let runningHeight = 0;
+  const spacerHeights: number[] = [];
   let pageCount = 1;
+  let accumulatedSpacerHeight = 0;
 
   for (let i = 0; i < flatUnits.length; i++) {
     const unit = flatUnits[i];
+    // Check overflow using the spaced bottom (unSpacedBottom + accumulated shift)
+    // Wait, the ribbon limits remain fixed because targetY also grows exactly by pageH + PAGE_GAP.
+    // Yes, unSpacedBottoms[i] > topMarginPx + pageCount * pageContentH works, BUT
+    // since we calculate exact targetY now, it's safer to just check actual spaced bottom against spaced limit!
+    const spacedLimit = pageCount * (pageH + PAGE_GAP) - PAGE_GAP + editorOriginY;
+    const actualBottom = unSpacedBottoms[i] + accumulatedSpacerHeight;
+
+    let breakIdx = -1;
 
     if (unit.isManualBreak) {
-      // Manual page-break node: insert spacer after the previous unit
-      if (i > 0) pageBreaks.push(i - 1);
-      pageCount++;
-      runningHeight = 0;
-      continue;
+      breakIdx = Math.max(0, i - 1);
+    } else if (actualBottom > spacedLimit) {
+      if (i === 0) continue; // Cannot break before the very first unit
+      breakIdx = i - 1;
     }
 
-    if (runningHeight > 0 && runningHeight + unit.height > pageContentH) {
-      // Unit overflows current page — break before it (spacer after unit i-1)
-      pageBreaks.push(i - 1);
+    if (breakIdx !== -1) {
+      // Don't insert duplicate breaks at the same index
+      if (pageBreaks.length === 0 || pageBreaks[pageBreaks.length - 1] !== breakIdx) {
+        pageBreaks.push(breakIdx);
+        
+        const breakUnit = flatUnits[breakIdx];
+        const nextUnit = flatUnits[breakIdx + 1];
+        
+        const breakActualBottom = unSpacedBottoms[breakIdx] + accumulatedSpacerHeight;
+        const targetY = pageCount * (pageH + PAGE_GAP) + editorOriginY;
+        
+        let spacerHeight = 0;
+        if (nextUnit) {
+          const p1MarginBot = getEffectiveMarginBottom(breakUnit.el);
+          const p2MarginTop = getEffectiveMarginTop(nextUnit.el);
+          
+          spacerHeight = Math.max(0, targetY - breakActualBottom - p1MarginBot - p2MarginTop);
+          
+          // The new accumulated shift for all elements starting from nextUnit
+          // is exactly what's needed to push nextUnit.top from its unSpaced position to targetY
+          accumulatedSpacerHeight = targetY - unSpacedTops[breakIdx + 1];
+        } else {
+          spacerHeight = Math.max(0, targetY - breakActualBottom);
+          accumulatedSpacerHeight += spacerHeight;
+        }
+        
+        spacerHeights.push(spacerHeight);
+      }
+      
       pageCount++;
-      runningHeight = unit.height;
-    } else {
-      runningHeight += unit.height;
+      
+      // Re-evaluate the overflowing unit (i) against the NEW page limit.
+      if (!unit.isManualBreak) {
+        i--;
+      }
     }
   }
 
-  if (IS_DEV) {
-    console.group('[pagination] computePageLayout complete');
-    console.log(`${flatUnits.length} units, ${pageCount} pages, ${pageBreaks.length} breaks`);
-    console.table(
-      flatUnits.map((u, i) => ({
-        i,
-        tag: u.el.tagName,
-        pos: u.pos,
-        endPos: u.endPos,
-        height: Math.round(u.height),
-        manual: u.isManualBreak,
-      }))
-    );
-    console.log('pageBreaks[]:', pageBreaks, '→ endPos values:', pageBreaks.map(i => flatUnits[i]?.endPos));
-    console.groupEnd();
-  }
+  // Restore spacers so the DOM isn't left broken before React re-renders
+  oldSpacers.forEach(s => (s as HTMLElement).style.display = '');
 
   return {
     flatUnits,
     pageBreaks,
+    spacerHeights,
     pageCount,
     pageContentHeight: pageContentH,
     pageHeight: pageH,
     pageGap: PAGE_GAP,
     pageWidth: pageW,
+    topMarginPx,
+    bottomMarginPx,
+    editorOriginY,
   };
 }
 

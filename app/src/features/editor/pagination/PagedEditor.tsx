@@ -39,8 +39,9 @@ export function PagedEditor({
   ));
   const lastReportedCountRef = useRef(1);
 
-  const syncPagination = useCallback(() => {
+  const syncPagination = useCallback((source: string = 'unknown') => {
     if (!editor?.view) return;
+    console.log(`[pagination] syncPagination triggered by: ${source}`);
     const pagination = computePageLayout(editor, topMarginMm, bottomMarginMm);
     paginationRef.current = pagination;
     updatePageBreakDecorations(editor.view, pagination);
@@ -63,11 +64,11 @@ export function PagedEditor({
       microQueued = true;
       queueMicrotask(() => {
         microQueued = false;
-        syncPagination();
+        syncPagination('editor-update');
       });
     };
     editor.on('update', handler);
-    const initTimer = setTimeout(syncPagination, 300);
+    const initTimer = setTimeout(() => syncPagination('init-timer'), 300);
     return () => { editor.off('update', handler); clearTimeout(initTimer); };
   }, [editor, syncPagination]);
 
