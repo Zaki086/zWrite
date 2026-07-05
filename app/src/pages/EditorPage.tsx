@@ -506,7 +506,7 @@ export default function EditorPage() {
   }
 
   return (
-    <div className="flex flex-col h-screen bg-background overflow-hidden">
+    <div className="app-shell flex flex-col h-screen bg-background overflow-hidden">
       {/* Navbar */}
       <div className={`no-print ${isFocusMode ? 'hidden' : ''}`}>
         <Navbar onToggleSidebarLeft={toggleSidebarLeft} onToggleSidebarRight={toggleSidebarRight} onPrint={handlePrint} onExport={handleExport} onToggleFocus={toggleFocusMode} onBack={() => navigate('/')} editor={editor} />
@@ -532,7 +532,7 @@ export default function EditorPage() {
       )}
 
       {/* Main Content */}
-      <div className="flex flex-1 overflow-hidden">
+      <div className="editor-row flex flex-1 overflow-hidden">
         {/* Left Sidebar */}
         {isSidebarLeftOpen && !isFocusMode && (
           <aside className="no-print w-[260px] flex-shrink-0 border-r border-border bg-card/50 overflow-y-auto zw-scrollbar">

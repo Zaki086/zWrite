@@ -417,12 +417,15 @@
     margin: 0; /* content padding serves as margins */
   }
 
-  html, body {
+  html, body, #root, .app-shell, .editor-row {
     background: white !important;
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
     margin: 0 !important;
     padding: 0 !important;
+    height: auto !important;
+    min-height: auto !important;
+    overflow: visible !important;
   }
 
   /* Hide all UI chrome */

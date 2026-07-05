@@ -10,6 +10,7 @@ import {
   AlignmentType, Table, TableRow, TableCell,
   WidthType, BorderStyle, ImageRun,
   convertInchesToTwip, UnderlineType,
+  Header, Footer, PageBreak,
   type FileChild,
 } from 'docx';
 import type { JSONContent } from '@tiptap/core';
@@ -59,12 +60,48 @@ function clampDim(v: number, min = 16, max = 576): number {
 /*  PUBLIC ENTRY                                                    */
 /* ================================================================ */
 
+async function resolveImages(json: JSONContent) {
+  if (json.type === 'image' && json.attrs && json.attrs.src) {
+    const src = json.attrs.src;
+    // We want to force it to a clean PNG data URL, even if it's already a data URL (to fix mime mismatches like webp->png)
+    try {
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          canvas.width = img.width;
+          canvas.height = img.height;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) return reject('No 2d context');
+          ctx.drawImage(img, 0, 0);
+          resolve(canvas.toDataURL('image/png'));
+        };
+        img.onerror = reject;
+        img.src = src;
+      });
+      json.attrs.src = dataUrl;
+    } catch (e) {
+      console.warn('Failed to resolve image src:', src, e);
+    }
+  }
+  if (json.content) {
+    await Promise.all(json.content.map(resolveImages));
+  }
+}
+
 export async function exportToDOCX(
   editor: Editor,
   pageSettings: PageSettings,
   title?: string,
 ): Promise<void> {
+  // @ts-ignore
+  window.__lastExportDocxArgs = { editor, pageSettings, title };
   const json = editor.getJSON();
+  
+  // Normalize all images to clean PNG data URIs before DOCX generation
+  await resolveImages(json);
+
   const children = jsonToDocx(json);
 
   if (children.length === 0) {
@@ -107,6 +144,26 @@ export async function exportToDOCX(
             : { width: convertInchesToTwip(8.27), height: convertInchesToTwip(11.69) },
         },
       },
+      headers: pageSettings.headerEnabled && pageSettings.headerText ? {
+        default: new Header({
+          children: [
+            new Paragraph({
+              children: [new TextRun({ text: pageSettings.headerText, font: BODY_FONT, size: 20, color: '000000' })],
+              alignment: AlignmentType.CENTER,
+            }),
+          ],
+        }),
+      } : undefined,
+      footers: pageSettings.footerEnabled && pageSettings.footerText ? {
+        default: new Footer({
+          children: [
+            new Paragraph({
+              children: [new TextRun({ text: pageSettings.footerText, font: BODY_FONT, size: 20, color: '000000' })],
+              alignment: AlignmentType.CENTER,
+            }),
+          ],
+        }),
+      } : undefined,
       children,
     }],
   });
@@ -121,6 +178,9 @@ export async function exportToDOCX(
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
 }
+
+// @ts-ignore
+if (typeof window !== 'undefined') window.exportToDOCX = exportToDOCX;
 
 /* ================================================================ */
 /*  JSON → DOCX                                                    */
@@ -146,6 +206,7 @@ function nodeToDocx(node: JSONContent): FileChild[] {
       })];
     case 'table': return [makeTable(node)];
     case 'image': return [makeImage(node)];
+    case 'pageBreak': return [new Paragraph({ children: [new PageBreak()] })];
     case 'doc':
     case 'listItem':
     case 'tableRow':
@@ -310,7 +371,7 @@ function makeList(node: JSONContent, ordered: boolean): Paragraph[] {
     if (li.type !== 'listItem') continue;
 
     // Flatten all content from the list item
-    const liRuns: TextRun[] = [];
+    const liRuns: (TextRun | ImageRun)[] = [];
     for (const child of (li.content || [])) {
       if (child.type === 'paragraph') {
         liRuns.push(...extractRuns(child));
@@ -349,7 +410,7 @@ function makeList(node: JSONContent, ordered: boolean): Paragraph[] {
 /*  IMAGE                                                           */
 /* ================================================================ */
 
-function makeImage(node: JSONContent): Paragraph {
+function makeImageRun(node: JSONContent): ImageRun | TextRun {
   const src = node.attrs?.src || '';
   const alt = node.attrs?.alt || 'image';
   const width = clampDim(parseInt(node.attrs?.width) || 400);
@@ -359,31 +420,31 @@ function makeImage(node: JSONContent): Paragraph {
     try {
       const mimeMatch = src.match(/^data:([^;]+);/);
       const mime = mimeMatch ? mimeMatch[1] : 'image/png';
+      
+      const base64 = src.split(',')[1];
+      const imageBuffer = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0)).buffer;
+
       let imgType: 'png' | 'jpg' | 'gif' = 'png';
       if (mime === 'image/jpeg' || mime === 'image/jpg') imgType = 'jpg';
       else if (mime === 'image/gif') imgType = 'gif';
 
-      const base64 = src.split(',')[1];
-      const imageBuffer = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0)).buffer;
-
-      const imageRun = new ImageRun({
+      return new ImageRun({
         data: imageBuffer,
         transformation: { width, height },
         type: imgType,
-      });
-
-      return new Paragraph({
-        children: [imageRun],
-        alignment: AlignmentType.CENTER,
-        spacing: { before: 120, after: 120 },
       });
     } catch (e) {
       console.warn('Image embed failed:', e);
     }
   }
 
+  // Explicitly return a visible warning for failed images instead of silently dropping
+  return new TextRun({ text: `[Failed Image: ${alt}]`, font: BODY_FONT, size: BODY_SIZE, color: 'FF0000', bold: true });
+}
+
+function makeImage(node: JSONContent): Paragraph {
   return new Paragraph({
-    children: [new TextRun({ text: `[Image: ${alt}]`, font: BODY_FONT, size: BODY_SIZE, color: '666666' })],
+    children: [makeImageRun(node)],
     alignment: AlignmentType.CENTER,
     spacing: { before: 120, after: 120 },
   });
@@ -399,14 +460,16 @@ interface RunOverrides {
   forceBold?: boolean;
 }
 
-function extractRuns(node: JSONContent, overrides?: RunOverrides): TextRun[] {
-  const runs: TextRun[] = [];
+function extractRuns(node: JSONContent, overrides?: RunOverrides): (TextRun | ImageRun)[] {
+  const runs: (TextRun | ImageRun)[] = [];
 
   for (const child of (node.content || [])) {
     if (child.type === 'text') {
       runs.push(...textToRuns(child.text || '', child.marks, overrides));
     } else if (child.type === 'hardBreak') {
       runs.push(new TextRun({ text: '', break: 1, font: BODY_FONT, size: overrides?.forceSize || BODY_SIZE, color: overrides?.forceColor || '000000' }));
+    } else if (child.type === 'image') {
+      runs.push(makeImageRun(child));
     } else {
       // Nested element — recurse
       runs.push(...extractRuns(child, overrides));
