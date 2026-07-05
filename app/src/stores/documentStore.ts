@@ -36,6 +36,10 @@ const defaultPageSettings: PageSettings = {
   margins: { top: 25, right: 25, bottom: 25, left: 25 },
   orientation: 'portrait',
   pageBorder: { enabled: false, width: 1, style: 'solid', color: '#000000' },
+  headerEnabled: false,
+  headerText: '',
+  footerEnabled: false,
+  footerText: '',
 };
 
 export const useDocumentStore = create<DocumentStore>()(

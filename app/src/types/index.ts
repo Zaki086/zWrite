@@ -31,6 +31,10 @@ export interface PageSettings {
     style: 'solid' | 'dashed' | 'dotted';
     color: string;
   };
+  headerEnabled?: boolean;
+  headerText?: string;
+  footerEnabled?: boolean;
+  footerText?: string;
 }
 
 export interface EditorState {

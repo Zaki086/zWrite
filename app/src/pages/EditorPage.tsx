@@ -37,7 +37,6 @@ import { SlashCommands, getSlashCommands } from '@/features/editor/slash-command
 import { PagedEditor } from '@/features/editor/pagination/PagedEditor';
 import { PageBreakExtension } from '@/features/editor/pagination/PageBreakExtension';
 import { ManualPageBreak } from '@/features/editor/pagination/ManualPageBreak';
-import { DocumentHeader, DocumentFooter } from '@/features/editor/pagination/HeaderFooter';
 
 const AUTOSAVE_DELAY = 1200;
 
@@ -102,8 +101,6 @@ function getEditorExtensions() {
     ResizableImage.configure({ allowBase64: true }),
     PageBreakExtension,
     ManualPageBreak,
-    DocumentHeader,
-    DocumentFooter,
     Link.configure({ openOnClick: false, autolink: true }),
     Placeholder.configure({ placeholder: 'Start writing or type "/" for commands...' }),
     Gapcursor,

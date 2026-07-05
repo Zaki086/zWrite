@@ -44,6 +44,7 @@ export function computePagination(
   const children = Array.from(dom.children);
   const blocks: PageBlock[] = [];
   let cumulative = 0;
+  let blockIndex = 0;
 
   for (let i = 0; i < children.length; i++) {
     const el = children[i] as HTMLElement;
@@ -62,13 +63,14 @@ export function computePagination(
 
     const rect = el.getBoundingClientRect();
     blocks.push({
-      blockIndex: i, // We use the absolute index in children to match back in PageBreakPlugin
+      blockIndex,
       height: rect.height,
       offset: cumulative,
       page: 0,
       el,
     });
     cumulative += rect.height;
+    blockIndex++;
   }
 
   const pageContentH = (A4_H_MM - topMarginMm - bottomMarginMm) * MM_TO_PX;

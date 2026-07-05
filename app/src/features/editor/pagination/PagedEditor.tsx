@@ -11,7 +11,7 @@
 
 import { useEffect, useRef, useCallback, useMemo } from 'react';
 import { EditorContent, type Editor } from '@tiptap/react';
-import { updatePageBreakDecorations } from './PageBreakPlugin';
+import { updatePageBreakDecorations, pageBreakPluginKey } from './PageBreakPlugin';
 import { PageBackgroundLayer } from './PageBackgroundLayer';
 import { computePagination, type PaginationResult } from './computePagination';
 
@@ -57,7 +57,7 @@ export function PagedEditor({
     const handler = ({ transaction }: { transaction: any }) => {
       // DONT recalculate if this update didn't change the document (e.g. just a selection change or our own decoration update)
       if (!transaction.docChanged) return;
-      if (transaction.getMeta('pageBreakPlugin')) return; // Explicitly skip our own decoration plugin
+      if (transaction.getMeta(pageBreakPluginKey)) return; // Explicitly skip our own decoration plugin
 
       if (microQueued) return;
       microQueued = true;

@@ -8,6 +8,8 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import { getResumeHTML, getInvoiceHTML, getReportHTML } from '@/utils/templates';
 
+import { useDocumentStore } from '@/stores/documentStore';
+
 export interface SlashCommand {
   id: string;
   label: string;
@@ -96,14 +98,14 @@ export function getSlashCommands(): SlashCommand[] {
       label: 'Document Header',
       description: 'Insert a page header',
       icon: <PanelTop className="w-4 h-4" />,
-      action: (editor) => editor.chain().focus().insertContent({ type: 'documentHeader' }).run(),
+      action: () => useDocumentStore.getState().setPageSettings({ headerEnabled: true }),
     },
     {
       id: 'document-footer',
       label: 'Document Footer',
       description: 'Insert a page footer',
       icon: <PanelBottom className="w-4 h-4" />,
-      action: (editor) => editor.chain().focus().insertContent({ type: 'documentFooter' }).run(),
+      action: () => useDocumentStore.getState().setPageSettings({ footerEnabled: true }),
     },
     {
       id: 'code-block',

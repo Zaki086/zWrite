@@ -437,20 +437,20 @@ User navigates back
 **Key files**: `EditorPage.tsx` — `FontSize` extension definition. `Toolbar.tsx` — `FontSizeDropdown` component. `docxExport.ts` — font-size parsing in `processInlineNode()`.
 ## Round 3 — Native Pagination, DOCX Import, and Headers/Footers
 
-### 11.15 Infinite Reflow Loop with ResizeObserver
-**What was wrong**: The initial attempt at pagination used a `ResizeObserver` on the editor DOM to detect height changes and trigger repagination. However, the repagination process injected `page-break-spacer` widgets into the DOM. The `ResizeObserver` detected these new spacers as height changes, triggering *another* repagination, causing an infinite, CPU-blocking reflow loop.
-**What changed**: Completely removed `ResizeObserver`. Pagination is now strictly gated within a ProseMirror `Plugin` that only recalculates when `transaction.docChanged` is true, or when explicitly requested via `transaction.setMeta('pageBreakPlugin', true)`. Crucially, `computePagination` strictly filters out non-content elements (`page-break-spacer`, `.ProseMirror-widget`, etc.) from height measurements, breaking the feedback loop entirely.
+### 11.15 Infinite Reflow Loop with ResizeObserver and Index Misalignment
+**What was wrong**: The initial attempt at pagination used a `ResizeObserver` which caused infinite reflow loops. After fixing the feedback loop, a secondary logic bug remained: `computePagination.ts` used the raw loop index `i` as the `blockIndex` for blocks, but `continue`d (skipped) over non-content elements (spacers, etc.). This caused gaps in the index sequence (e.g., `0, 1, 3, 4`). However, `PageBreakPlugin.ts` used `doc.forEach` to build a gapless sequence (`0, 1, 2, 3`) of real nodes. When the plugin tried to look up `childPositions.find(c => c.index === lastBlock.blockIndex)`, it mismatched or failed completely, causing spacers to be placed incorrectly or dropped entirely.
+**What changed**: Completely removed `ResizeObserver`. Pagination is now strictly gated within a ProseMirror `Plugin` that only recalculates when `transaction.docChanged` is true. Crucially, `computePagination` strictly filters out non-content elements from height measurements AND maintains a separate, gapless `blockIndex` counter that only increments when a real block is processed. This correctly aligns with `PageBreakPlugin`'s `childIdx`. Additionally, the plugin metadata check in `PagedEditor` was fixed to use `pageBreakPluginKey` rather than a bare string.
 
 ### 11.16 Native Original DOCX Importer
 **What was wrong**: Previous attempts at DOCX import relied on lossy HTML conversion (mammoth) or attempted to pull in an entirely new editor architecture (Windoc) which destroyed the app's existing UI and extensions.
 **What changed**: Built a custom, native DOCX parser using `jszip` and the browser's native `DOMParser`. The parser directly reads `word/document.xml` and maps OOXML (`<w:p>`, `<w:r>`, `<w:tbl>`) directly into our Tiptap/ProseMirror JSON format. Images are read from `word/media/` and converted to Base64 data URIs. No HTML conversion means 100% fidelity to our internal schema.
 
 ### 11.17 Document Headers, Footers, and Manual Page Breaks
-**What was wrong**: The application lacked standard word processor features for headers, footers, and forcing content to a new page.
+**What was wrong**: The application lacked standard word processor features for headers, footers, and forcing content to a new page. The initial attempt at Headers/Footers made them single Tiptap nodes, which failed to repeat on every page.
 **What changed**: 
 1. Added a `ManualPageBreak` Tiptap Node (`data-type="page-break"`) and wired it into `computePagination` to instantly increment the `currentPage` counter during block assignment.
-2. Added `DocumentHeader` and `DocumentFooter` block nodes with absolute CSS positioning to visually lock them into the top and bottom margins of the physical page decoration. 
-3. Wired these into the Slash Commands menu (`/page-break`, `/document-header`, `/document-footer`).
+2. Restructured Document Headers and Footers to be stored as document metadata in `useDocumentStore` (via `pageSettings`) rather than inline Tiptap nodes. These are rendered as `textarea` inputs by `PageBackgroundLayer.tsx` on every physical page, perfectly mimicking the behavior of native word processors. 
+3. Wired these into the Slash Commands menu (`/page-break`, `/document-header`, `/document-footer`) and the main Toolbar (added new buttons in the Insert section).
 ## 12. Future Improvements
 
 1. **Collaboration**: Add Yjs or similar CRDT library for real-time collaboration. The ProseMirror document model is already compatible with Yjs.
