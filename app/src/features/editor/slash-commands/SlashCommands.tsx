@@ -3,7 +3,7 @@ import { type Editor } from '@tiptap/react';
 import {
   Heading1, Heading2, Heading3, Table,
   Image, Minus, FileUser, Receipt, FileBarChart, List, ListOrdered,
-  Quote, Code, Scissors, PanelTop, PanelBottom,
+  Quote, Code,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { getResumeHTML, getInvoiceHTML, getReportHTML } from '@/utils/templates';
@@ -85,27 +85,6 @@ export function getSlashCommands(): SlashCommand[] {
       description: 'Insert a blockquote',
       icon: <Quote className="w-4 h-4" />,
       action: (editor) => editor.chain().focus().toggleBlockquote().run(),
-    },
-    {
-      id: 'page-break',
-      label: 'Page Break',
-      description: 'Force a new page',
-      icon: <Scissors className="w-4 h-4" />,
-      action: (editor) => editor.chain().focus().insertContent({ type: 'pageBreak' }).run(),
-    },
-    {
-      id: 'document-header',
-      label: 'Document Header',
-      description: 'Insert a page header',
-      icon: <PanelTop className="w-4 h-4" />,
-      action: () => useDocumentStore.getState().setPageSettings({ headerEnabled: true }),
-    },
-    {
-      id: 'document-footer',
-      label: 'Document Footer',
-      description: 'Insert a page footer',
-      icon: <PanelBottom className="w-4 h-4" />,
-      action: () => useDocumentStore.getState().setPageSettings({ footerEnabled: true }),
     },
     {
       id: 'code-block',

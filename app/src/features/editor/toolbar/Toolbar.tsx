@@ -6,7 +6,7 @@ import {
   AlignRight, AlignJustify, List, ListOrdered, Heading1, Heading2, Heading3,
   Heading4, Heading5, Heading6, Type, Highlighter, Palette, Table,
   Image as ImageIcon, Link, Undo, Redo, Printer, Download, Search,
-  Minus, Quote, ChevronDown, Merge, Split, Scissors, PanelTop, PanelBottom,
+  Minus, Quote, ChevronDown, Merge, Split,
 } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Separator } from '@/components/ui/separator';
@@ -545,9 +545,6 @@ export const Toolbar = memo(function Toolbar({ editor, onSearch, onPrint, onExpo
           <ToolbarButton onClick={insertLink} isActive={editor.isActive('link')} icon={<Link className="w-4 h-4" />} tooltip="Insert Link" shortcut="Ctrl+K" />
           <ToolbarButton onClick={insertHorizontalRule} icon={<Minus className="w-4 h-4" />} tooltip="Divider" />
           <ToolbarButton onClick={insertBlockquote} isActive={editor.isActive('blockquote')} icon={<Quote className="w-4 h-4" />} tooltip="Quote" />
-          <ToolbarButton onClick={() => editor.chain().focus().insertContent({ type: 'pageBreak' }).run()} icon={<Scissors className="w-4 h-4" />} tooltip="Page Break" />
-          <ToolbarButton onClick={() => useDocumentStore.getState().setPageSettings({ headerEnabled: true })} icon={<PanelTop className="w-4 h-4" />} tooltip="Header" />
-          <ToolbarButton onClick={() => useDocumentStore.getState().setPageSettings({ footerEnabled: true })} icon={<PanelBottom className="w-4 h-4" />} tooltip="Footer" />
         </div>
 
         <Separator orientation="vertical" className="h-5 mx-1" />
