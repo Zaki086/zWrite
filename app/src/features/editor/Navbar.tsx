@@ -8,6 +8,9 @@ import { useUIStore } from '@/stores/uiStore';
 import { useEditorStore } from '@/stores/editorStore';
 import { motion } from 'framer-motion';
 
+import { Editor } from '@tiptap/react';
+import { ImportDocxButton } from './ImportDocxButton';
+
 interface NavbarProps {
   onToggleSidebarLeft: () => void;
   onToggleSidebarRight: () => void;
@@ -15,10 +18,11 @@ interface NavbarProps {
   onExport: () => void;
   onToggleFocus: () => void;
   onBack?: () => void;
+  editor?: Editor | null;
 }
 
 export const Navbar = memo(function Navbar({
-  onToggleSidebarLeft, onToggleSidebarRight, onPrint, onExport, onToggleFocus, onBack,
+  onToggleSidebarLeft, onToggleSidebarRight, onPrint, onExport, onToggleFocus, onBack, editor
 }: NavbarProps) {
   const title = useDocumentStore((s) => s.documentTitle);
   const setDocumentTitle = useDocumentStore((s) => s.setDocumentTitle);
@@ -158,9 +162,12 @@ export const Navbar = memo(function Navbar({
           className="flex items-center justify-center w-8 h-8 rounded-md hover:bg-accent text-muted-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
           aria-label="Export DOCX"
           type="button"
+          title="Export DOCX"
         >
           <Download className="w-4 h-4" />
         </motion.button>
+        
+        <ImportDocxButton editor={editor!} />
 
         <motion.button
           whileTap={{ scale: 0.95 }}

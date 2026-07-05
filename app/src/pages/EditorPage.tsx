@@ -36,6 +36,8 @@ import { SearchReplace } from '@/features/editor/search/SearchReplace';
 import { SlashCommands, getSlashCommands } from '@/features/editor/slash-commands/SlashCommands';
 import { PagedEditor } from '@/features/editor/pagination/PagedEditor';
 import { PageBreakExtension } from '@/features/editor/pagination/PageBreakExtension';
+import { ManualPageBreak } from '@/features/editor/pagination/ManualPageBreak';
+import { DocumentHeader, DocumentFooter } from '@/features/editor/pagination/HeaderFooter';
 
 const AUTOSAVE_DELAY = 1200;
 
@@ -99,6 +101,9 @@ function getEditorExtensions() {
     TableHeader,
     ResizableImage.configure({ allowBase64: true }),
     PageBreakExtension,
+    ManualPageBreak,
+    DocumentHeader,
+    DocumentFooter,
     Link.configure({ openOnClick: false, autolink: true }),
     Placeholder.configure({ placeholder: 'Start writing or type "/" for commands...' }),
     Gapcursor,
@@ -507,7 +512,7 @@ export default function EditorPage() {
     <div className="flex flex-col h-screen bg-background overflow-hidden">
       {/* Navbar */}
       <div className={`no-print ${isFocusMode ? 'hidden' : ''}`}>
-        <Navbar onToggleSidebarLeft={toggleSidebarLeft} onToggleSidebarRight={toggleSidebarRight} onPrint={handlePrint} onExport={handleExport} onToggleFocus={toggleFocusMode} onBack={() => navigate('/')} />
+        <Navbar onToggleSidebarLeft={toggleSidebarLeft} onToggleSidebarRight={toggleSidebarRight} onPrint={handlePrint} onExport={handleExport} onToggleFocus={toggleFocusMode} onBack={() => navigate('/')} editor={editor} />
       </div>
 
       {/* Toolbar */}

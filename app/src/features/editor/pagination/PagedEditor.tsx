@@ -50,11 +50,15 @@ export function PagedEditor({
     }
   }, [editor, topMarginMm, bottomMarginMm, onPageCountChange]);
 
-  // Editor update — sync via microtask
+  // Editor update — strictly gated on content changes
   useEffect(() => {
     if (!editor) return;
     let microQueued = false;
-    const handler = () => {
+    const handler = ({ transaction }: { transaction: any }) => {
+      // DONT recalculate if this update didn't change the document (e.g. just a selection change or our own decoration update)
+      if (!transaction.docChanged) return;
+      if (transaction.getMeta('pageBreakPlugin')) return; // Explicitly skip our own decoration plugin
+
       if (microQueued) return;
       microQueued = true;
       queueMicrotask(() => {
@@ -65,20 +69,6 @@ export function PagedEditor({
     editor.on('update', handler);
     const initTimer = setTimeout(syncPagination, 300);
     return () => { editor.off('update', handler); clearTimeout(initTimer); };
-  }, [editor, syncPagination]);
-
-  // ResizeObserver for resize/zoom
-  useEffect(() => {
-    if (!editor?.view) return;
-    const dom = editor.view.dom as HTMLElement;
-    if (!dom || typeof ResizeObserver === 'undefined') return;
-    let roRaf = 0;
-    const ro = new ResizeObserver(() => {
-      cancelAnimationFrame(roRaf);
-      roRaf = requestAnimationFrame(syncPagination);
-    });
-    ro.observe(dom);
-    return () => { cancelAnimationFrame(roRaf); ro.disconnect(); };
   }, [editor, syncPagination]);
 
   // Margin changes

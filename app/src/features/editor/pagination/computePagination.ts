@@ -10,6 +10,7 @@ export interface PageBlock {
   height: number;
   offset: number;
   page: number;
+  el: HTMLElement;
 }
 
 export interface PaginationResult {
@@ -46,12 +47,26 @@ export function computePagination(
 
   for (let i = 0; i < children.length; i++) {
     const el = children[i] as HTMLElement;
+
+    // Strict Filtering: Ignore any injected widgets, spacers, or background elements
+    if (
+      el.classList.contains('page-break-spacer') ||
+      el.classList.contains('ProseMirror-widget') ||
+      el.classList.contains('page-background') ||
+      el.hasAttribute('data-page-end') ||
+      el.getAttribute('data-type') === 'document-header' ||
+      el.getAttribute('data-type') === 'document-footer'
+    ) {
+      continue;
+    }
+
     const rect = el.getBoundingClientRect();
     blocks.push({
-      blockIndex: i,
+      blockIndex: i, // We use the absolute index in children to match back in PageBreakPlugin
       height: rect.height,
       offset: cumulative,
       page: 0,
+      el,
     });
     cumulative += rect.height;
   }
@@ -68,9 +83,17 @@ export function computePagination(
   let currentPage = 0;
   let currentPageUsed = 0;
   for (const b of blocks) {
-    if (currentPageUsed > 0 && currentPageUsed + b.height > pageContentH) {
+    const isManualBreak = b.el.getAttribute('data-type') === 'page-break';
+
+    if ((currentPageUsed > 0 && currentPageUsed + b.height > pageContentH) || isManualBreak) {
       currentPage++;
       currentPageUsed = 0;
+      if (isManualBreak) {
+          // The page break block itself goes on the new page, taking 0 height effectively (or its natural height)
+          b.page = currentPage;
+          currentPageUsed += b.height;
+          continue;
+      }
     }
     b.page = currentPage;
     currentPageUsed += b.height;

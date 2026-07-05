@@ -435,7 +435,22 @@ User navigates back
 ### B.7 Font Size Control
 **What it does**: Added a font-size dropdown to the toolbar with 15 presets (8–72pt). Implemented via a custom Tiptap extension (`FontSize`) that extends `TextStyle` with a `fontSize` attribute, using the standard approach. Font size is preserved through DOCX export (mapped to docx `size` in half-points).
 **Key files**: `EditorPage.tsx` — `FontSize` extension definition. `Toolbar.tsx` — `FontSizeDropdown` component. `docxExport.ts` — font-size parsing in `processInlineNode()`.
+## Round 3 — Native Pagination, DOCX Import, and Headers/Footers
 
+### 11.15 Infinite Reflow Loop with ResizeObserver
+**What was wrong**: The initial attempt at pagination used a `ResizeObserver` on the editor DOM to detect height changes and trigger repagination. However, the repagination process injected `page-break-spacer` widgets into the DOM. The `ResizeObserver` detected these new spacers as height changes, triggering *another* repagination, causing an infinite, CPU-blocking reflow loop.
+**What changed**: Completely removed `ResizeObserver`. Pagination is now strictly gated within a ProseMirror `Plugin` that only recalculates when `transaction.docChanged` is true, or when explicitly requested via `transaction.setMeta('pageBreakPlugin', true)`. Crucially, `computePagination` strictly filters out non-content elements (`page-break-spacer`, `.ProseMirror-widget`, etc.) from height measurements, breaking the feedback loop entirely.
+
+### 11.16 Native Original DOCX Importer
+**What was wrong**: Previous attempts at DOCX import relied on lossy HTML conversion (mammoth) or attempted to pull in an entirely new editor architecture (Windoc) which destroyed the app's existing UI and extensions.
+**What changed**: Built a custom, native DOCX parser using `jszip` and the browser's native `DOMParser`. The parser directly reads `word/document.xml` and maps OOXML (`<w:p>`, `<w:r>`, `<w:tbl>`) directly into our Tiptap/ProseMirror JSON format. Images are read from `word/media/` and converted to Base64 data URIs. No HTML conversion means 100% fidelity to our internal schema.
+
+### 11.17 Document Headers, Footers, and Manual Page Breaks
+**What was wrong**: The application lacked standard word processor features for headers, footers, and forcing content to a new page.
+**What changed**: 
+1. Added a `ManualPageBreak` Tiptap Node (`data-type="page-break"`) and wired it into `computePagination` to instantly increment the `currentPage` counter during block assignment.
+2. Added `DocumentHeader` and `DocumentFooter` block nodes with absolute CSS positioning to visually lock them into the top and bottom margins of the physical page decoration. 
+3. Wired these into the Slash Commands menu (`/page-break`, `/document-header`, `/document-footer`).
 ## 12. Future Improvements
 
 1. **Collaboration**: Add Yjs or similar CRDT library for real-time collaboration. The ProseMirror document model is already compatible with Yjs.
