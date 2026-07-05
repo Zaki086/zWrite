@@ -52,22 +52,12 @@ function buildDecorations(doc: any, pagination: PaginationResult): DecorationSet
     pageMap.set(b.page, arr);
   }
 
-  // Get ProseMirror document positions for each top-level child
-  const childPositions: { index: number; pos: number; end: number }[] = [];
-  let childIdx = 0;
-  doc.forEach((node: any, offset: number) => {
-    childPositions.push({ index: childIdx, pos: offset, end: offset + node.nodeSize });
-    childIdx++;
-  });
-
   // Place a spacer AFTER the last block of each page (except the last)
   for (let pageNum = 0; pageNum < pageCount - 1; pageNum++) {
     const pageBlocks = pageMap.get(pageNum);
     if (!pageBlocks || pageBlocks.length === 0) continue;
 
     const lastBlock = pageBlocks[pageBlocks.length - 1];
-    const childEntry = childPositions.find((c) => c.index === lastBlock.blockIndex);
-    if (!childEntry) continue;
 
     // Height: remaining space on this page + page gap
     const firstBlock = pageBlocks[0];
@@ -88,7 +78,7 @@ function buildDecorations(doc: any, pagination: PaginationResult): DecorationSet
 
     // Place widget AT the end of the last block (side: 1 = after)
     decorations.push(
-      Decoration.widget(childEntry.end, () => widget, {
+      Decoration.widget(lastBlock.endPos, () => widget, {
         side: 1,
         key: `page-end-${pageNum}`,
       })

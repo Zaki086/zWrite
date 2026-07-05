@@ -451,6 +451,16 @@ User navigates back
 1. Added a `ManualPageBreak` Tiptap Node (`data-type="page-break"`) and wired it into `computePagination` to instantly increment the `currentPage` counter during block assignment.
 2. Restructured Document Headers and Footers to be stored as document metadata in `useDocumentStore` (via `pageSettings`) rather than inline Tiptap nodes. These are rendered as `textarea` inputs by `PageBackgroundLayer.tsx` on every physical page, perfectly mimicking the behavior of native word processors. 
 3. Wired these into the Slash Commands menu (`/page-break`, `/document-header`, `/document-footer`) and the main Toolbar (added new buttons in the Insert section).
+## Round 4 — List and Table Splitting
+
+### 11.18 Splitting Container Elements Across Pages
+**What was wrong**: The pagination engine historically treated top-level `dom.children` as atomic units. If a multi-item list (`<ul>`, `<ol>`) or a multi-row table (`<table>`) happened to cross a page boundary, it wouldn't split; the *entire* list or table would be shunted to the next page, creating massive unexpected gaps and sudden "jumping" behaviors during typing.
+**What changed**: 
+1. `computePagination.ts` was refactored to recursively traverse the ProseMirror document using `editor.state.doc.forEach`. When it encounters a splittable container (like `bulletList`, `orderedList`, or `table`), it descends into its children (`listItem` and `tableRow`) and measures those *inner* elements independently via `editor.view.nodeDOM()`.
+2. Each block's exact ProseMirror `end` position is now stored natively inside `PageBlock`.
+3. `PageBreakPlugin.ts` now uses this `endPos` directly. It inserts the spacer widget *inside* the container, effectively splitting the list or table visually across physical pages without corrupting the semantic HTML structure or document model.
+*(Note: Table splitting was implemented using the same logic to split at the row level, but more advanced features like repeating headers on the second page remain as future polish).*
+
 ## 12. Future Improvements
 
 1. **Collaboration**: Add Yjs or similar CRDT library for real-time collaboration. The ProseMirror document model is already compatible with Yjs.

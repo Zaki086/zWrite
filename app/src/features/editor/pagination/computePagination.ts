@@ -10,6 +10,7 @@ export interface PageBlock {
   height: number;
   offset: number;
   page: number;
+  endPos: number;
   el: HTMLElement;
 }
 
@@ -40,38 +41,52 @@ export function computePagination(
     return emptyResult(topMarginMm, bottomMarginMm);
   }
 
-  // Measure every top-level child
-  const children = Array.from(dom.children);
   const blocks: PageBlock[] = [];
   let cumulative = 0;
   let blockIndex = 0;
 
-  for (let i = 0; i < children.length; i++) {
-    const el = children[i] as HTMLElement;
-
-    // Strict Filtering: Ignore any injected widgets, spacers, or background elements
+  function traverse(node: any, pos: number) {
     if (
-      el.classList.contains('page-break-spacer') ||
-      el.classList.contains('ProseMirror-widget') ||
-      el.classList.contains('page-background') ||
-      el.hasAttribute('data-page-end') ||
-      el.getAttribute('data-type') === 'document-header' ||
-      el.getAttribute('data-type') === 'document-footer'
+      node.type.name === 'bulletList' ||
+      node.type.name === 'orderedList' ||
+      node.type.name === 'table'
     ) {
-      continue;
-    }
+      // Descend into container children (<li>, <tr>)
+      node.forEach((child: any, offset: number) => {
+        traverse(child, pos + 1 + offset);
+      });
+    } else {
+      // Splittable unit or standard top-level block
+      const el = editor!.view.nodeDOM(pos) as HTMLElement;
+      if (el && el.nodeType === 1) {
+        // Strict Filtering: Ignore any injected widgets, spacers, or background elements
+        if (
+          el.classList.contains('page-break-spacer') ||
+          el.classList.contains('ProseMirror-widget') ||
+          el.classList.contains('page-background') ||
+          el.hasAttribute('data-page-end')
+        ) {
+          return;
+        }
 
-    const rect = el.getBoundingClientRect();
-    blocks.push({
-      blockIndex,
-      height: rect.height,
-      offset: cumulative,
-      page: 0,
-      el,
-    });
-    cumulative += rect.height;
-    blockIndex++;
+        const rect = el.getBoundingClientRect();
+        blocks.push({
+          blockIndex,
+          height: rect.height,
+          offset: cumulative,
+          page: 0,
+          endPos: pos + node.nodeSize,
+          el,
+        });
+        cumulative += rect.height;
+        blockIndex++;
+      }
+    }
   }
+
+  editor.state.doc.forEach((node, offset) => {
+    traverse(node, offset);
+  });
 
   const pageContentH = (A4_H_MM - topMarginMm - bottomMarginMm) * MM_TO_PX;
   const pageH = A4_H_MM * MM_TO_PX;
