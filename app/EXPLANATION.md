@@ -451,15 +451,39 @@ User navigates back
 1. Added a `ManualPageBreak` Tiptap Node (`data-type="page-break"`) and wired it into `computePagination` to instantly increment the `currentPage` counter during block assignment.
 2. Restructured Document Headers and Footers to be stored as document metadata in `useDocumentStore` (via `pageSettings`) rather than inline Tiptap nodes. These are rendered as `textarea` inputs by `PageBackgroundLayer.tsx` on every physical page, perfectly mimicking the behavior of native word processors. 
 3. Wired these into the Slash Commands menu (`/page-break`, `/document-header`, `/document-footer`) and the main Toolbar (added new buttons in the Insert section).
-## Round 4 — List and Table Splitting
+## Round 4 — Single-Pass Pagination Architecture
 
-### 11.18 Splitting Container Elements Across Pages
-**What was wrong**: The pagination engine historically treated top-level `dom.children` as atomic units. If a multi-item list (`<ul>`, `<ol>`) or a multi-row table (`<table>`) happened to cross a page boundary, it wouldn't split; the *entire* list or table would be shunted to the next page, creating massive unexpected gaps. The Round 12 attempt to fix this introduced a silent logic bug: it recursively measured nested `<li>`s, but `PageBreakPlugin` still used a flat `childIdx` to look up positions via `blockIndex`. Since flattening lists creates more blocks than top-level nodes, `blockIndex` desynced from `childIdx`, causing the plugin to silently fail to find the elements and drop the spacers entirely (resulting in "no visible change in behavior").
-**What changed**: 
-1. `computePagination.ts` was refactored to recursively traverse the ProseMirror document using `editor.state.doc.forEach`. When it encounters a splittable container (like `bulletList`, `orderedList`, or `table`), it descends into its children (`listItem` and `tableRow`) and measures those *inner* elements independently via `editor.view.nodeDOM()`.
-2. Each block's exact ProseMirror `end` position is now calculated natively inside `computePagination` and stored inside `PageBlock`.
-3. `PageBreakPlugin.ts` was completely rewritten to eliminate `childPositions` index matching. It now directly uses `lastBlock.endPos`. It inserts the spacer widget *inside* the container at that exact document position, effectively splitting the list or table visually across physical pages without corrupting the semantic HTML structure or document model.
-*(Note: Table splitting was implemented using the same logic to split at the row level, but more advanced features like repeating headers on the second page remain as future polish).*
+### 11.18 Root Cause: Two Independent Traversals
+
+**Background:** Every round from 12 onward attempted to patch pagination's list/table-splitting behavior, but kept producing "no visible change." The root cause was structural, not a minor logic bug:
+
+The system was split into **two independent traversals** that had to agree on which positions to operate:
+
+1. `computePagination.ts` walked the ProseMirror doc, built `PageBlock[]` with `endPos` values, and computed page assignments.
+2. `PageBreakPlugin.ts` received the result and attempted to place spacer decorations. But it did this by re-deriving which block to annotate via `childPositions`/`blockIndex` — a flat index into top-level doc children. Once the first pass started recursing into containers (lists, tables), it produced more blocks than there were top-level children, and the index lookup in the second pass silently found nothing, dropping the spacer entirely.
+
+The key insight came from studying `windoc`'s layout model (an open-source canvas-based document renderer, whose *algorithm* — not code — is relevant here). windoc flattens the entire document into one ordered flat array in one pass, then immediately runs page assignment over that *same* array. The structure that decided the break is identical to the structure that renders the break — **structural desync is impossible**.
+
+### 11.19 Single-Pass Architecture (Round 14)
+
+**What changed:**
+
+`computePagination.ts` was rewritten as `computePageLayout()` implementing a true single-pass model:
+
+**Step 1 — Flatten:** One `doc.forEach` traversal builds a flat `FlatUnit[]` array. Container nodes (`bulletList`, `orderedList`, `table`) are recursively expanded into their children (`listItem`, `tableRow`) and are never themselves units. Every leaf unit captures `{ pos, endPos, el, height }` using `view.nodeDOM(pos)` with a `view.domAtPos(pos)` fallback.
+
+**Step 2 — Accumulate (same pass, same array):** Immediately after flattening, a greedy height accumulator walks `flatUnits` in order. When `runningHeight + unit.height > pageContentHeight`, a break index (`i - 1`) is pushed to `pageBreaks[]`. Manual page-break nodes (`data-type="page-break"`) force a break after the previous unit.
+
+**`PageBreakPlugin.ts`** was rewritten to consume `{ flatUnits, pageBreaks }` directly. For each `pageBreaks[bi]`, it places a `Decoration.widget` at `flatUnits[pageBreaks[bi]].endPos` — a direct read from the shared array. There is no second traversal of the doc, no independent index mapping, and `childPositions`/`blockIndex` no longer exist anywhere in the codebase.
+
+**Why this eliminates the bug class:** The `endPos` used for decoration placement is literally the same value computed during measurement. There is no second structure that must "agree" with the first. Adding list items or table rows simply adds more `FlatUnit` entries to the shared array and recomputes `pageBreaks` over that same array — nothing can go out of sync.
+
+**Verified:**
+- Build: `tsc -b && vite build` passes with zero errors.
+- `grep -r childPositions src/` → 0 results
+- `grep -r blockIndex src/` → 0 results
+- Automated test (Puppeteer): 40-item bullet list correctly splits at item 39, with a measured 57px gap between items 39 and 40, and exactly 1 spacer in the DOM.
+
 
 ## 12. Future Improvements
 

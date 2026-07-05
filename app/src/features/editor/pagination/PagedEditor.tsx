@@ -13,7 +13,7 @@ import { useEffect, useRef, useCallback, useMemo } from 'react';
 import { EditorContent, type Editor } from '@tiptap/react';
 import { updatePageBreakDecorations, pageBreakPluginKey } from './PageBreakPlugin';
 import { PageBackgroundLayer } from './PageBackgroundLayer';
-import { computePagination, type PaginationResult } from './computePagination';
+import { computePageLayout, type PageLayoutResult } from './computePagination';
 
 interface Props {
   editor: Editor | null;
@@ -34,14 +34,14 @@ export function PagedEditor({
   pageBorder,
   onPageCountChange,
 }: Props) {
-  const paginationRef = useRef<PaginationResult>(computePagination(
+  const paginationRef = useRef<PageLayoutResult>(computePageLayout(
     editor, topMarginMm, bottomMarginMm
   ));
   const lastReportedCountRef = useRef(1);
 
   const syncPagination = useCallback(() => {
     if (!editor?.view) return;
-    const pagination = computePagination(editor, topMarginMm, bottomMarginMm);
+    const pagination = computePageLayout(editor, topMarginMm, bottomMarginMm);
     paginationRef.current = pagination;
     updatePageBreakDecorations(editor.view, pagination);
     if (pagination.pageCount !== lastReportedCountRef.current) {

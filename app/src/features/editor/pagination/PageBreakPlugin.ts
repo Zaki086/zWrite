@@ -1,14 +1,16 @@
 /**
- * ProseMirror Plugin: Page Break Decorations
+ * PageBreakPlugin.ts — ProseMirror Plugin: Page Break Decorations
  *
- * Places spacer widgets AFTER the last block of each page (not before
- * the first block of the next page). This ensures the spacer gets
- * pushed down naturally when the preceding block grows — content
- * never flows past it into the gap.
+ * Consumes the output of computePageLayout (PageLayoutResult) directly.
+ * Places one spacer widget after flatUnits[pageBreaks[i]] for each page break.
+ *
+ * Critically: this plugin performs NO second traversal of the document.
+ * All positions come directly from the flatUnits[] array built by
+ * computePageLayout. There is no independent index mapping to maintain.
  */
 import { Plugin, PluginKey } from 'prosemirror-state';
 import { Decoration, DecorationSet } from 'prosemirror-view';
-import type { PaginationResult, PageBlock } from './computePagination';
+import type { PageLayoutResult } from './computePagination';
 
 export const pageBreakPluginKey = new PluginKey<DecorationSet>('pageBreakPlugin');
 
@@ -19,6 +21,7 @@ export function createPageBreakPlugin(): Plugin<DecorationSet> {
     state: {
       init() { return DecorationSet.empty; },
       apply(tr, value) {
+        // Always map existing decorations through any document changes first
         let mapped = value.map(tr.mapping, tr.doc);
         const meta = tr.getMeta(pageBreakPluginKey);
         if (meta?.pagination) {
@@ -36,51 +39,50 @@ export function createPageBreakPlugin(): Plugin<DecorationSet> {
   });
 }
 
-function buildDecorations(doc: any, pagination: PaginationResult): DecorationSet {
-  const { blocks, pageHeight, pageGap, pageCount } = pagination;
+function buildDecorations(doc: any, pagination: PageLayoutResult): DecorationSet {
+  const { flatUnits, pageBreaks, pageCount, pageContentHeight, pageGap } = pagination;
   const decorations: Decoration[] = [];
 
-  if (pageCount <= 1 || blocks.length === 0) {
+  if (pageCount <= 1 || pageBreaks.length === 0 || flatUnits.length === 0) {
     return DecorationSet.empty;
   }
 
-  // Group blocks by page
-  const pageMap = new Map<number, PageBlock[]>();
-  for (const b of blocks) {
-    const arr = pageMap.get(b.page) || [];
-    arr.push(b);
-    pageMap.set(b.page, arr);
-  }
+  // For each page break index, insert a spacer widget AFTER the unit at that index.
+  // The spacer height fills the remaining space on the current page plus the gap
+  // to the next page, so content below it visually starts at the top of the next page.
+  for (let bi = 0; bi < pageBreaks.length; bi++) {
+    const unitIndex = pageBreaks[bi];
+    const unit = flatUnits[unitIndex];
+    if (!unit) continue;
 
-  // Place a spacer AFTER the last block of each page (except the last)
-  for (let pageNum = 0; pageNum < pageCount - 1; pageNum++) {
-    const pageBlocks = pageMap.get(pageNum);
-    if (!pageBlocks || pageBlocks.length === 0) continue;
+    // Calculate how much vertical space is left on this page by summing heights
+    // of all units on the same page (units between the previous break and this one).
+    const prevBreakUnitIndex = bi === 0 ? -1 : pageBreaks[bi - 1];
+    let pageUsedHeight = 0;
+    for (let j = prevBreakUnitIndex + 1; j <= unitIndex; j++) {
+      if (flatUnits[j]) pageUsedHeight += flatUnits[j].height;
+    }
 
-    const lastBlock = pageBlocks[pageBlocks.length - 1];
-
-    // Height: remaining space on this page + page gap
-    const firstBlock = pageBlocks[0];
-    const used = lastBlock.offset + lastBlock.height - firstBlock.offset;
-    const remaining = Math.max(0, pageHeight - used);
+    const remaining = Math.max(0, pageContentHeight - pageUsedHeight);
     const spacerHeight = remaining + pageGap;
 
-    if (spacerHeight <= pageGap) continue; // No meaningful spacer needed
+    if (spacerHeight <= pageGap) continue; // Nothing meaningful to add
 
     const widget = document.createElement('div');
-    widget.className = 'page-break-spacer';
+    widget.className = 'page-break-spacer ProseMirror-widget';
     widget.style.height = `${spacerHeight}px`;
     widget.style.pointerEvents = 'none';
     widget.style.userSelect = 'none';
     widget.setAttribute('contenteditable', 'false');
     widget.setAttribute('aria-hidden', 'true');
-    widget.setAttribute('data-page-end', String(pageNum + 1));
+    widget.setAttribute('data-page-end', String(bi + 1));
 
-    // Place widget AT the end of the last block (side: 1 = after)
+    // Place widget directly at unit.endPos — read straight from the flat array.
+    // No second traversal, no index lookup against an independently-built structure.
     decorations.push(
-      Decoration.widget(lastBlock.endPos, () => widget, {
-        side: 1,
-        key: `page-end-${pageNum}`,
+      Decoration.widget(unit.endPos, () => widget, {
+        side: 1,           // Place after the node at endPos
+        key: `page-end-${bi}`,
       })
     );
   }
@@ -90,7 +92,7 @@ function buildDecorations(doc: any, pagination: PaginationResult): DecorationSet
 
 export function updatePageBreakDecorations(
   view: any,
-  pagination: PaginationResult
+  pagination: PageLayoutResult
 ): void {
   if (!view) return;
   const tr = view.state.tr;
