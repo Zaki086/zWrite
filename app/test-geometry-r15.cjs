@@ -47,11 +47,19 @@ async function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
       const editorOriginY = eRect.top - cRect.top;
 
       const spacers = Array.from(document.querySelectorAll('.page-break-spacer'));
+      const bottomMarginPx = 25 * MM_TO_PX;
       const results = spacers.map((sp, bi) => {
         const next = sp.nextElementSibling;
+        const prev = sp.previousElementSibling;
+        
         const nextTopRel = next ? next.getBoundingClientRect().top - cRect.top : null;
         const expectedY = (bi + 1) * (pageH + PAGE_GAP) + editorOriginY;
         const drift = nextTopRel !== null ? nextTopRel - expectedY : null;
+
+        const prevBottomRel = prev ? prev.getBoundingClientRect().bottom - cRect.top : null;
+        const expectedBottomLimit = (bi + 1) * (pageH + PAGE_GAP) - PAGE_GAP - bottomMarginPx;
+        const triggerDrift = prevBottomRel !== null ? prevBottomRel - expectedBottomLimit : null;
+
         return {
           bi,
           spacerH: Math.round(parseFloat(sp.style.height)),
@@ -59,6 +67,10 @@ async function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
           expectedY: Math.round(expectedY),
           drift: drift !== null ? Math.round(drift) : null,
           ok: drift !== null && Math.abs(drift) <= 2,
+          prevBottomRel: prevBottomRel !== null ? Math.round(prevBottomRel) : null,
+          expectedBottomLimit: Math.round(expectedBottomLimit),
+          triggerDrift: triggerDrift !== null ? Math.round(triggerDrift) : null,
+          triggerOk: triggerDrift !== null && triggerDrift <= 2,
         };
       });
 
@@ -77,7 +89,7 @@ async function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
   if (r1.error) { console.log('Error:', r1.error); }
   else {
     console.log(`editorOriginY=${r1.editorOriginY} spacers=${r1.spacerCount}`);
-    r1.results.forEach(d => console.log(`  Break ${d.bi}: h=${d.spacerH}px nextY=${d.nextTopRel} expect=${d.expectedY} drift=${d.drift}px ${d.ok ? '✅' : '❌'}`));
+    r1.results.forEach(d => console.log(`  Break ${d.bi}: h=${d.spacerH}px nextY=${d.nextTopRel} expect=${d.expectedY} drift=${d.drift}px ${d.ok ? '✅' : '❌'} | prevBottom=${d.prevBottomRel} limit=${d.expectedBottomLimit} triggerOverflow=${d.triggerDrift}px ${d.triggerOk ? '✅' : '❌'}`));
   }
 
   // Test 2: 120 paragraphs (5+ pages)
@@ -87,7 +99,7 @@ async function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
   if (r2.error) { console.log('Error:', r2.error); }
   else {
     console.log(`spacers=${r2.spacerCount}`);
-    r2.results.forEach(d => console.log(`  Break ${d.bi}: h=${d.spacerH}px nextY=${d.nextTopRel} expect=${d.expectedY} drift=${d.drift}px ${d.ok ? '✅' : '❌'}`));
+    r2.results.forEach(d => console.log(`  Break ${d.bi}: h=${d.spacerH}px nextY=${d.nextTopRel} expect=${d.expectedY} drift=${d.drift}px ${d.ok ? '✅' : '❌'} | prevBottom=${d.prevBottomRel} limit=${d.expectedBottomLimit} triggerOverflow=${d.triggerDrift}px ${d.triggerOk ? '✅' : '❌'}`));
   }
 
   // Test 3: 40-item list
@@ -97,7 +109,22 @@ async function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
   if (r3.error) { console.log('Error:', r3.error); }
   else {
     console.log(`spacers=${r3.spacerCount}`);
-    r3.results.forEach(d => console.log(`  Break ${d.bi}: h=${d.spacerH}px nextY=${d.nextTopRel} expect=${d.expectedY} drift=${d.drift}px ${d.ok ? '✅' : '❌'}`));
+    r3.results.forEach(d => console.log(`  Break ${d.bi}: h=${d.spacerH}px nextY=${d.nextTopRel} expect=${d.expectedY} drift=${d.drift}px ${d.ok ? '✅' : '❌'} | prevBottom=${d.prevBottomRel} limit=${d.expectedBottomLimit} triggerOverflow=${d.triggerDrift}px ${d.triggerOk ? '✅' : '❌'}`));
+  }
+
+  // Test 4: Table spanning a break
+  const r4 = await runTest('Table spanning a break', (() => {
+    let h = '<table><tbody>';
+    for (let i = 1; i <= 40; i++) {
+      h += `<tr><td><p>Row ${i} Col 1</p></td><td><p>Row ${i} Col 2</p></td></tr>`;
+    }
+    h += '</tbody></table>';
+    return h;
+  })());
+  if (r4.error) { console.log('Error:', r4.error); }
+  else {
+    console.log(`spacers=${r4.spacerCount}`);
+    r4.results.forEach(d => console.log(`  Break ${d.bi}: h=${d.spacerH}px nextY=${d.nextTopRel} expect=${d.expectedY} drift=${d.drift}px ${d.ok ? '✅' : '❌'} | prevBottom=${d.prevBottomRel} limit=${d.expectedBottomLimit} triggerOverflow=${d.triggerDrift}px ${d.triggerOk ? '✅' : '❌'}`));
   }
 
   await browser.close();

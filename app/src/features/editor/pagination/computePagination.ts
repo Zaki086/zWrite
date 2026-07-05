@@ -20,6 +20,12 @@
 import type { Editor } from '@tiptap/react';
 
 const MM_TO_PX = 3.779527559;
+declare global {
+  interface Window {
+    loggedPage1Bug?: boolean;
+  }
+}
+
 const A4_W_MM = 210;
 const A4_H_MM = 297;
 const PAGE_GAP = 24;
@@ -160,8 +166,6 @@ function flattenNode(
   });
 }
 
-const IS_DEV = typeof import.meta !== 'undefined' && (import.meta as any).env?.DEV;
-
 /**
  * Single-pass page layout engine.
  *
@@ -247,10 +251,7 @@ export function computePageLayout(
   for (let i = 0; i < flatUnits.length; i++) {
     const unit = flatUnits[i];
     // Check overflow using the spaced bottom (unSpacedBottom + accumulated shift)
-    // Wait, the ribbon limits remain fixed because targetY also grows exactly by pageH + PAGE_GAP.
-    // Yes, unSpacedBottoms[i] > topMarginPx + pageCount * pageContentH works, BUT
-    // since we calculate exact targetY now, it's safer to just check actual spaced bottom against spaced limit!
-    const spacedLimit = pageCount * (pageH + PAGE_GAP) - PAGE_GAP + editorOriginY;
+    const spacedLimit = pageCount * (pageH + PAGE_GAP) - PAGE_GAP - bottomMarginPx;
     const actualBottom = unSpacedBottoms[i] + accumulatedSpacerHeight;
 
     let breakIdx = -1;
